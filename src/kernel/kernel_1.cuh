@@ -18,3 +18,19 @@ mysgemm_v1(int M, int N, int K, float alpha, float *A, float* B, float beta, flo
     
     C[gy * N + gx] = alpha * tmp + beta * C[gy * N + gx];
 }
+
+__global__ __launch_bounds__(1024) void
+sgemm1(int M, int N, int K, float alpha, float* A, float* B, float beta, float* C) {
+    int gx = (blockDim.x * blockIdx.x) + threadIdx.x; //global x
+    int gy = (blockDim.y * blockIdx.y) + threadIdx.y; // global y
+
+    float Cout = 0;
+
+    for (i=0; i < K; ++i) {
+        Cout += A[gy * K + i] * B[i*N+gx] ; // 2 gma + fma
+    }
+
+    C[gy * N + gx] = Cout;
+
+
+}
