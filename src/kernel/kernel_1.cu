@@ -9,13 +9,13 @@ __global__ __launch_bounds__(1024) void
 mysgemm_v1(int M, int N, int K, float alpha, float *A, float* B, float beta, float *C) {
     int gx = blockIdx.x * blockDim.x + threadIdx.x; // global x
     int gy = blockIdx.y * blockDim.y + threadIdx.y; // global y
-    
+
     float tmp = 0.;
-    
+
     for (int i = 0; i < K; i++) {
         tmp += A[gy * K + i] * B[i * N + gx]; // two global memory accesses and one FMA (fused multiply-add)
     }
-    
+
     C[gy * N + gx] = alpha * tmp + beta * C[gy * N + gx];
 }
 
@@ -35,4 +35,30 @@ sgemm1(int M, int N, int K, float alpha, float* A, float* B, float beta, float* 
     C[gy * N + gx] = Cout; // C = M * N ... row stride (gy * N) + gx for col index
 
 
+}
+
+__global__ void mygemm1(int M, int K, int N, float* A, float* B, float* C) {
+    int gx = (blockDim.x * blockIdx.x) + threadIdx.x;
+    int gy = (blockDim.y * blockIdx.y) + threadIdx.y;
+
+    float Cout = 0;
+
+    for (i=0; i<K;++i) {
+        Cout += A[gy*K +i] * B[i*N+gx];
+    }
+    C[gy*N+gx] = Cout; // M*N
+}
+
+
+__global__ void mygemm2 (int M, int N, int K, float* A, float* B, float* C) {
+
+    int gx = (blockDim.x * blockIdx.x) + threadIdx.x;
+    int gy = (blockDim.y * blockIdx.y) + threadIdx.x;
+
+    float Cout = 0;
+
+    for (i=0; i<K; ++i) {
+        Cout += A[gy *K + i] * B[i*N + gx];
+    }
+    C[gy*N + gx] = Cout;
 }

@@ -13,7 +13,7 @@ set(CMAKE_CXX_FLAGS "-O3 -std=c++11")
 
 # set(CUDA_NVCC_FLAGS -g;-G;-Xptxas;-dlcm=ca)
 # set(CUDA_NVCC_FLAGS -Xptxas;-dlcm=cg)
-set(CUDA_NVCC_FLAGS -arch=compute_70;-code=compute_70)
+set(CUDA_NVCC_FLAGS -arch=compute_80;-code=compute_80)
 
 # 若FIND CUDA ERROR，在~/.bashrc中添加配置环境变量和动态库路径
 # CUDA_HOME=/usr/local/cuda
@@ -33,4 +33,3 @@ CUDA_ADD_EXECUTABLE(sgemm sgemm.cu ${SRC})
 
 # link cudart cublas
 target_link_libraries(sgemm ${CUDA_LIBRARIES} ${CUDA_cublas_LIBRARY})
-
