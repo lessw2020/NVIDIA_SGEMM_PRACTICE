@@ -27,10 +27,12 @@ sgemm1(int M, int N, int K, float alpha, float* A, float* B, float beta, float* 
     float Cout = 0;
 
     for (i=0; i < K; ++i) {
+        // gy * K = row stride; +i = col index of row
+        // i*N = N col stride; + gx = col index
         Cout += A[gy * K + i] * B[i*N+gx] ; // 2 gma + fma
     }
 
-    C[gy * N + gx] = Cout;
+    C[gy * N + gx] = Cout; // C = M * N ... row stride (gy * N) + gx for col index
 
 
 }
