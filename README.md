@@ -4,22 +4,19 @@
 
 
 
-# 概述
+# Overview
+Oriented towards NVIDIA GPUs, using CUDA programming to gradually optimize the performance of matrix multiplication:
 
-面向NVIDIA GPU，使用CUDA编程逐步优化矩阵乘法运算性能：
-
-| 核函数   | 描述                    | GFLOPS   | 自定义核函数/CUBLAS（%） |
-| -------- | ----------------------- | -------- | ------------------------ |
-| CUBLAS   | 官方库函数              | 14448.69 | 基准                     |
-| kernel_1 | 朴素实现                | 2262.168 | 15.65657                 |
-| kernel_2 | 共享内存缓存            | 4216.536 | 29.18283                 |
-| kernel_3 | 一维Thread Tile并行优化 | 7809.629 | 54.05078                 |
-| kernel_4 | 二维Thread Tile并行优化 | 12251.3  | 84.79179                 |
-| kernel_5 | 寄存器缓存              | 12177.95 | 84.28412                 |
-| kernel_6 | FLOAT4向量访存          | 13161.49 | 91.09125                 |
-| kernel_7 | 双缓存预取              | 13634.98 | 94.36832                 |
-
-> NVIDIA GeForce RTX 3090，矩阵尺寸5120
+Kernel Function	Description	GFLOPS	Custom Kernel/CUBLAS (%)
+CUBLAS	Official library function	14448.69	Benchmark
+kernel_1	Naive implementation	2262.168	15.65657
+kernel_2	Shared memory caching	4216.536	29.18283
+kernel_3	1D Thread Tile parallel optimization	7809.629	54.05078
+kernel_4	2D Thread Tile parallel optimization	12251.3	84.79179
+kernel_5	Register caching	12177.95	84.28412
+kernel_6	FLOAT4 vector memory access	13161.49	91.09125
+kernel_7	Double buffering prefetching	13634.98	94.36832
+NVIDIA GeForce RTX 3090, matrix size 5120
 
 # 配置
 
@@ -28,30 +25,30 @@
 
 # 目录
 
-```
-NVIDIA_SGEMM_PRACTICE                                   # 根目录
-    ├── images                                          # 图片结果
-    │     ├── describe_kernel_1.png  
-    │     ├── describe_kernel_x.png
-    │     └── kernel_x_vs_y.png
-    ├── test                                            # 测试结果
-    │     ├── test_kernel_0.txt 
-    │     ├── test_kernel_1.txt 
-    │     └── test_kernel_x.txt 
-    └── src                                             # 源文件
-    │    ├── kernel
-    │    │  ├── kernel_1.cuh                            # 声明和定义
-    │    │  ├── kernel_2.cuh
-    │    │  └── kernel_x.cuh
-    │    ├── kernel.cuh
-    │    ├── utils.cuh                                  # 辅助函数
-    │    └── utils.cu
-    ├── plot.py                                         # 根据test结果绘图
-    ├── run.sh                                          # 运行编译后可执行文件
-    ├── sgemm.cu                                        # 主程序
-    └── CMakeLists.txt                                  # 编译相关
-```
 
+~~~
+NVIDIA_SGEMM_PRACTICE # Root directory
+├── images # Image results
+│   ├── describe_kernel_1.png
+│   ├── describe_kernel_x.png
+│   └── kernel_x_vs_y.png
+├── test # Test results
+│   ├── test_kernel_0.txt
+│   ├── test_kernel_1.txt
+│   └── test_kernel_x.txt
+└── src # Source files
+    ├── kernel
+    │   ├── kernel_1.cuh # Declaration and definition
+    │   ├── kernel_2.cuh
+    │   └── kernel_x.cuh
+    ├── kernel.cuh
+    ├── utils.cuh # Utility functions
+    └── utils.cu
+├── plot.py # Plotting based on test results
+├── run.sh # Run compiled executable
+├── sgemm.cu # Main program
+└── CMakeLists.txt # Compilation-related
+~~~
 # 运行
 1. 配置NVCC编译参数
 > 在CMakeLists.txt中修改`set(CUDA_NVCC_FLAGS -arch=compute_70;-code=compute_70)`
@@ -64,40 +61,36 @@ NVIDIA_SGEMM_PRACTICE                                   # 根目录
 
 > `python plot.py 0 1`表示绘制CUBLAS和kernel_1计算效率对比图；
 
-# 逐步优化
+#Step-by-step optimization
+##kernel 1
+Naive basic implementation of matrix multiplication
 
-##  kernel 1 
-
-**Naive基础版矩阵乘法实现**
+Map each logical thread to each element of matrix C, each thread is responsible for computing one element in C;
 
 将每个逻辑线程与矩阵C的每一个元素相对应，每个线程负责C中一个元素的计算；
 
 ![](./images/describe_kernel_1.png)
-
 ```cpp
 __global__ __launch_bounds__(1024) void
-mysgemm_v1(int M, int N, int K, float alpha, float *A, float *B, float beta, float *C) {
-
-    int gx = blockIdx.x * blockDim.x + threadIdx.x; // 全局x
-    int gy = blockIdx.y * blockDim.y + threadIdx.y; // 全局y
-
+mysgemm_v1(int M, int N, int K, float alpha, float *A, float* B, float beta, float *C) {
+    int gx = blockIdx.x * blockDim.x + threadIdx.x; // global x
+    int gy = blockIdx.y * blockDim.y + threadIdx.y; // global y
     float tmp = 0.;
     for (int i = 0; i < K; i++) {
-        tmp += A[gy * K + i] * B[i * N + gx]; // 两次全局内存访问和一次FMA（累加乘）
+        tmp += A[gy * K + i] * B[i * N + gx]; // two global memory accesses and one FMA (fused multiply-add)
     }
     C[gy * N + gx] = alpha * tmp + beta * C[gy * N + gx];
 }
 ```
 
+
+
 ![](./images/kernel_culas_vs_1.png)
+The performance of the unoptimized matrix multiplication is less than 1/10 of CUBLAS, the specific analysis is as follows;
 
-未经过优化的矩阵乘法性能不足CUBLAS的1/10，具体分析如下；
-
-- 计算访存比：每次迭代需要进行一次FMA（乘累加）和两次全局内存读取，计算访存比1/2；
-- 访存量：访问全局内存，C矩阵每个元素计算需要访问`2K`个单精度浮点数，完成全部计算需要` 2*K*M*N`；
-
-全局内存访问延迟高（几百cycle），同时相同位置元素被重复读取（C中同一行元素计算共享A中同一行元素，C中同一列元素计算共享B中同一列元素），另一方面，较低的计算访存比无法有效隐藏访存延迟，因此，访存延迟和计算访存比是导致kernel 1效率低下的原因。
-
+Computation to memory access ratio: each iteration requires one FMA (fused multiply-add) and two global memory reads, the computation to memory access ratio is 1/2;
+Memory access: accessing global memory, computing each element of matrix C requires accessing 2K single-precision floating-point numbers, completing all computations requires 2*K*M*N;
+Global memory access has high latency (hundreds of cycles), and the same location elements are repeatedly read (elements in the same row of C share the same row elements of A, elements in the same column of C share the same column elements of B), on the other hand, the low computation to memory access ratio cannot effectively hide the memory access latency, therefore, memory access latency and computation to memory access ratio are the reasons for the low efficiency of kernel 1.
 ## kernel 2
 
 **利用共享内存缓存减少全局内存访存量和访存延迟**
