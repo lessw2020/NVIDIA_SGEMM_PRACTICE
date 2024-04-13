@@ -2,7 +2,7 @@
 
 #include <random>
 
-__global__ void matmul () {
+__global__ void matmul (float* a, float* b, float* c, int N) {
 
 }
 
@@ -12,9 +12,10 @@ void init_matrix(float* m, int N) {
 
     // Create a distribution for generating random floats between 0 and 100
     std::uniform_real_distribution<float> dist(0.0f, 100.0f);
+    int total_size = N*N;
 
-    for (i=0; i<N; ++i) {
-        m[i] = dist(rng)
+    for (int i=0; i< total_size; ++i) {
+        m[i] = dist(rng);
 
     }
 }
@@ -33,6 +34,15 @@ cudaMallocManaged(&c, bytes);
 init_matrix(a,N);
 init_matrix(b,N);
 
+// set block and grid dims
+int threads = 16;
+int blocks = (N + threads -1) / threads;
+
+dim3 Threads (threads, threads);
+dim3 Blocks (blocks, blocks);
+
+matmul<<<Blocks, Threads>>>(a, b, c, N);
+cudaDeviceSynchronize();
 
 
 
